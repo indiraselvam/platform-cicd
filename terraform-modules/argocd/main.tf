@@ -96,13 +96,12 @@ resource "helm_release" "argocd" {
   # sso/admin bootstrap password, repo credentials, etc — never inline
   # plaintext here. Reference the same External Secrets pattern used for
   # application secrets (see gitops repo README).
-  dynamic "set_sensitive" {
-    for_each = var.admin_password_bcrypt_hash != null ? [var.admin_password_bcrypt_hash] : []
-    content {
+  set_sensitive = var.admin_password_bcrypt_hash != null ? [
+    {
       name  = "configs.secret.argocdServerAdminPassword"
-      value = set_sensitive.value
+      value = var.admin_password_bcrypt_hash
     }
-  }
+  ] : []
 
   depends_on = [kubernetes_namespace.argocd]
 }
