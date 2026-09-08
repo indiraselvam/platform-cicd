@@ -1,0 +1,19 @@
+@"
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Terraform lock files are usually committed
+# *.terraform.lock.hcl
+
+# Kubernetes
+*.kubeconfig
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+"@ | Set-Content .gitignore
