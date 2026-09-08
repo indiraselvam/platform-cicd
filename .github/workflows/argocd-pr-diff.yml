@@ -1,10 +1,5 @@
 name: argocd-pr-diff
 
-# Runs in THIS repo (platform-cicd) on every PR — shows what ArgoCD would
-# actually change before merge, using argocd's own diff engine rather than
-# a plain YAML diff, so Helm-templated output is compared correctly.
-# Read-only: `argocd app diff` never mutates the cluster.
-
 on:
   pull_request:
     paths:
@@ -20,11 +15,15 @@ jobs:
   diff:
     strategy:
       matrix:
-        environment: [dev]
+        environment: [dev, staging, production]
+
     runs-on: ubuntu-latest
+
     environment: ${{ matrix.environment }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -32,27 +31,32 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
-      - name: Install argocd CLI
+      - name: Install Argo CD CLI
         run: |
-          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          curl -sSL -o /usr/local/bin/argocd \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /usr/local/bin/argocd
 
-      - name: Login (read-only SSO/API token, per-env secret)
+      - name: Login to Argo CD
         run: |
           argocd login "${{ vars.ARGOCD_SERVER }}" \
-            --auth-token "${{ secrets.ARGOCD_READONLY_TOKEN }}" --grpc-web
+            --auth-token "${{ secrets.ARGOCD_READONLY_TOKEN }}" \
+            --grpc-web
 
       - name: Diff
-        id: diff
         run: |
-          argocd app diff example-app --server "${{ vars.ARGOCD_SERVER }}" --grpc-web \
+          argocd app diff example-app \
+            --server "${{ vars.ARGOCD_SERVER }}" \
+            --grpc-web \
             > diff_output.txt 2>&1 || true
 
-      - uses: actions/github-script@v7
+      - name: Comment diff on PR
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const diff = fs.readFileSync('diff_output.txt', 'utf8').slice(-50000) || 'No diff';
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
