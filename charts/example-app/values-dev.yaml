@@ -1,7 +1,8 @@
 image:
-  repository: "958124171439.dkr.ecr.ap-south-1.amazonaws.com/example-app"
-  tag: "REPLACED_BY_CI" # app CI overwrites this line with the built commit SHA
+  repository: "958124171439.dkr.ecr.ap-south-1.amazonaws.com/dev-sample-app"
+  tag: "REPLACED_BY_CI"
 
 replicaCount: 1
+
 autoscaling:
   enabled: false
