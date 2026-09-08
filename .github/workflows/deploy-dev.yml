@@ -17,8 +17,6 @@ jobs:
       environment: dev
       ecr_repository: dev-sample-app
       aws_region: ap-south-1
-    secrets:
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
   gitops:
     needs: build
