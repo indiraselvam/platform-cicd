@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: example-app
+  namespace: argocd
+  labels:
+    environment: dev
+spec:
+  project: dev
+  source:
+    repoURL: https://github.com/indiraselvam/platform-cicd.git
+    targetRevision: main
+    path: charts/example-app
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+      # image.tag is bumped by the app repo's CI PR — nothing else in
+      # values-dev.yaml changes on a routine deploy.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: example-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m

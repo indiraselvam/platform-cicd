@@ -1,0 +1,61 @@
+name: argocd-pr-diff
+
+# Runs in THIS repo (platform-cicd) on every PR — shows what ArgoCD would
+# actually change before merge, using argocd's own diff engine rather than
+# a plain YAML diff, so Helm-templated output is compared correctly.
+# Read-only: `argocd app diff` never mutates the cluster.
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - "argocd/**"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff:
+    strategy:
+      matrix:
+        environment: [dev, staging, production]
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}-readonly
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Login (read-only SSO/API token, per-env secret)
+        run: |
+          argocd login "${{ vars.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_READONLY_TOKEN }}" --grpc-web
+
+      - name: Diff
+        id: diff
+        run: |
+          argocd app diff example-app --server "${{ vars.ARGOCD_SERVER }}" --grpc-web \
+            > diff_output.txt 2>&1 || true
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const diff = fs.readFileSync('diff_output.txt', 'utf8').slice(-50000) || 'No diff';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### ArgoCD diff — \`${{ matrix.environment }}\`\n\`\`\`diff\n${diff}\n\`\`\``,
+            });

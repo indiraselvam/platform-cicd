@@ -1,0 +1,80 @@
+# Copy this file to: <your terraform repo>/.github/workflows/apply-terraform.yml
+#
+# Runs on merge to main. Same change-detection as the PR workflow.
+# `environment:` on the called job (see terraform-apply.yml) is what makes
+# production wait for approval — configure a GitHub Environment named
+# "production-apply" with a required reviewer in this repo's Settings.
+
+name: Apply terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "environments/**"
+      - "modules/**"
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dev: ${{ steps.filter.outputs.dev }}
+      staging: ${{ steps.filter.outputs.staging }}
+      production: ${{ steps.filter.outputs.production }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dev:
+              - 'environments/dev/**'
+              - 'modules/**'
+            staging:
+              - 'environments/staging/**'
+              - 'modules/**'
+            production:
+              - 'environments/production/**'
+              - 'modules/**'
+
+  apply-dev:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.dev == 'true'
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-apply.yml@main
+    with:
+      environment: dev
+      working_directory: environments/dev
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV }}
+
+  # staging applies automatically after dev succeeds — sequential rollout,
+  # not parallel, so a bad module change is caught in dev first
+  apply-staging:
+    needs: [detect-changes, apply-dev]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.staging == 'true' &&
+      (needs.apply-dev.result == 'success' || needs.apply-dev.result == 'skipped')
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-apply.yml@main
+    with:
+      environment: staging
+      working_directory: environments/staging
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_STAGING }}
+
+  # production requires the "production-apply" GitHub Environment reviewer
+  # approval — this job will visibly pause in the Actions UI until someone
+  # approves it, same as a Jenkins input step but with a real audit trail
+  apply-production:
+    needs: [detect-changes, apply-staging]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.production == 'true' &&
+      (needs.apply-staging.result == 'success' || needs.apply-staging.result == 'skipped')
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-apply.yml@main
+    with:
+      environment: production
+      working_directory: environments/production
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_PRODUCTION }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

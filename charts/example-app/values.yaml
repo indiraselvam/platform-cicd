@@ -1,0 +1,48 @@
+image:
+  repository: "" # set per-env, e.g. <account-id>.dkr.ecr.ap-south-1.amazonaws.com/example-app
+  tag: ""          # bumped by app CI on every build — this is the field that changes 99% of the time
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # eks.amazonaws.com/role-arn: set per-env if this app needs AWS
+  # permissions — follow the same IRSA pattern as modules/irsa in the
+  # terraform repo (ebs_csi/cluster_autoscaler roles).
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+probes:
+  liveness:
+    path: /healthz
+  readiness:
+    path: /readyz
+
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

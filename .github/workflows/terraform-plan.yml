@@ -1,0 +1,103 @@
+name: terraform-plan
+
+# Reusable workflow — called from the `terraform` repo's own workflow
+# (see wrapper-workflows-for-infra-repo/pr-terraform.yml). Runs on every
+# PR that touches an environment's terraform. Comments the plan on the PR;
+# never applies.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string # dev | staging | production
+      working_directory:
+        required: true
+        type: string # e.g. environments/dev
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+
+permissions:
+  id-token: write   # required for OIDC — no AWS_ACCESS_KEY_ID/SECRET anywhere
+  contents: read
+  pull-requests: write # to post the plan as a PR comment
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-plan
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8" # match required_version in versions.tf
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: gha-tfplan-${{ inputs.environment }}-${{ github.run_id }}
+
+      - name: terraform fmt check
+        run: terraform fmt -check -recursive ../../
+
+      - name: terraform init
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+      - run: tflint --init && tflint -f compact
+        working-directory: ${{ inputs.working_directory }}
+
+      - name: checkov (policy/security scan)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ${{ inputs.working_directory }}
+          quiet: true
+          soft_fail: true # don't block the PR yet — flip to false once the baseline is clean
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan \
+            -var-file=terraform.tfvars \
+            -var-file=../common.tfvars | tee plan_output.txt
+        continue-on-error: true
+
+      - name: Post plan to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ inputs.working_directory }}/plan_output.txt', 'utf8').slice(-60000);
+            const body = `#### Terraform Plan — \`${{ inputs.environment }}\`\n<details><summary>Show plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if plan errored
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      # Upload the plan file itself so the apply workflow (triggered
+      # separately on merge) doesn't have to re-plan against a possibly
+      # different state — optional, remove if you'd rather always
+      # re-plan immediately before apply.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ github.sha }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 5

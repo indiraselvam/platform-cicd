@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: staging
+  namespace: argocd
+spec:
+  description: Applications running on the staging EKS cluster
+  sourceRepos:
+    - "https://github.com/indiraselvam/platform-cicd.git"
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # namespace/kind allow-list intentionally narrower than dev — expand
+  # deliberately per resource type your workloads actually need, don't
+  # default this to "*"/"*" outside dev.
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "external-secrets.io"
+      kind: ExternalSecret
+    - group: "networking.k8s.io"
+      kind: Ingress
+  orphanedResources:
+    warn: true

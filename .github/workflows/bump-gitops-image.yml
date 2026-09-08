@@ -1,0 +1,70 @@
+name: bump-gitops-image
+
+# Reusable workflow, called from an app repo right after
+# docker-build-push.yml. This is the ONLY thing app CI is allowed to do
+# to affect the cluster: open a PR against platform-cicd changing one
+# line (image.tag) in one values file. No kubectl, no helm upgrade, no
+# cluster credentials at all in this job.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string # must match charts/<app_name> in platform-cicd
+      image_tag:
+        required: true
+        type: string
+      auto_merge:
+        required: false
+        type: boolean
+        default: false # true for dev, false for staging/production
+    secrets:
+      GITOPS_REPO_TOKEN:
+        required: true # fine-grained PAT or GitHub App token, scoped ONLY to platform-cicd, contents:write + pull-requests:write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: my-org/platform-cicd
+          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+          path: platform-cicd
+
+      - name: Bump image.tag
+        working-directory: platform-cicd
+        run: |
+          FILE="charts/${{ inputs.app_name }}/values-${{ inputs.environment }}.yaml"
+          yq -i '.image.tag = "${{ inputs.image_tag }}"' "$FILE"
+          git diff --exit-code "$FILE" && echo "No change" && exit 0 || true
+
+      - name: Open PR
+        working-directory: platform-cicd
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
+        run: |
+          BRANCH="bump/${{ inputs.app_name }}-${{ inputs.environment }}-${{ inputs.image_tag }}"
+          git checkout -b "$BRANCH"
+          git config user.name "gitops-bot"
+          git config user.email "gitops-bot@users.noreply.github.com"
+          git add "charts/${{ inputs.app_name }}/values-${{ inputs.environment }}.yaml"
+          git commit -m "deploy(${{ inputs.app_name }}/${{ inputs.environment }}): ${{ inputs.image_tag }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "deploy(${{ inputs.app_name }}/${{ inputs.environment }}): ${{ inputs.image_tag }}" \
+            --body "Automated image bump from ${{ github.repository }}@${{ github.sha }}" \
+            --base main --head "$BRANCH"
+
+      - name: Auto-merge (dev only)
+        if: inputs.auto_merge
+        working-directory: platform-cicd
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
+        run: |
+          BRANCH="bump/${{ inputs.app_name }}-${{ inputs.environment }}-${{ inputs.image_tag }}"
+          gh pr merge "$BRANCH" --squash --auto

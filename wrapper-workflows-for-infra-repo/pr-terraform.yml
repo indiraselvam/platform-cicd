@@ -1,0 +1,66 @@
+# Copy this file to: <your terraform repo>/.github/workflows/pr-terraform.yml
+#
+# Triggers a plan for every environment whose directory changed in the PR.
+# Calls the reusable workflow hosted in platform-cicd — keeps the actual
+# plan/lint/scan logic in one place instead of duplicated per repo.
+
+name: PR - terraform plan
+
+on:
+  pull_request:
+    paths:
+      - "environments/**"
+      - "modules/**"
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dev: ${{ steps.filter.outputs.dev }}
+      staging: ${{ steps.filter.outputs.staging }}
+      production: ${{ steps.filter.outputs.production }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dev:
+              - 'environments/dev/**'
+              - 'modules/**'
+            staging:
+              - 'environments/staging/**'
+              - 'modules/**'
+            production:
+              - 'environments/production/**'
+              - 'modules/**'
+
+  plan-dev:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.dev == 'true'
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-plan.yml@main
+    with:
+      environment: dev
+      working_directory: environments/dev
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV }}
+
+  plan-staging:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.staging == 'true'
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-plan.yml@main
+    with:
+      environment: staging
+      working_directory: environments/staging
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_STAGING }}
+
+  plan-production:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.production == 'true'
+    uses: indiraselvam/platform-cicd/.github/workflows/terraform-plan.yml@main
+    with:
+      environment: production
+      working_directory: environments/production
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_PRODUCTION }}

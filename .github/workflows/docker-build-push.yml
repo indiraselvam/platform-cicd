@@ -1,0 +1,73 @@
+name: docker-build-push
+
+# Reusable workflow, called from an app repo. Builds the image, pushes to
+# ECR tagged with the commit SHA (never :latest — every deploy must be
+# traceable to an exact commit). Outputs the tag for the caller to pass
+# into bump-gitops-image.yml.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      aws_region:
+        required: false
+        type: string
+        default: ap-south-1
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+    outputs:
+      image_tag:
+        value: ${{ jobs.build.outputs.image_tag }}
+      image_uri:
+        value: ${{ jobs.build.outputs.image_uri }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      image_uri: ${{ steps.build.outputs.image_uri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: gha-build-${{ github.run_id }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - id: tag
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPO: ${{ inputs.ecr_repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          IMAGE_URI="$REGISTRY/$REPO:$TAG"
+          docker build -t "$IMAGE_URI" .
+          # Scan before push — fail the build on HIGH/CRITICAL, same gate
+          # a Jenkins Trivy stage would have given you.
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image --exit-code 1 --severity HIGH,CRITICAL "$IMAGE_URI" || \
+            (echo "Vulnerability scan failed" && exit 1)
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"

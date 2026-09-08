@@ -1,0 +1,30 @@
+# The ONLY manifest ever applied by hand (via scripts/bootstrap.sh).
+# Everything else — including changes to this file itself — is managed
+# by ArgoCD reconciling this repo from here on (app-of-apps pattern).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: production
+  source:
+    repoURL: https://github.com/indiraselvam/platform-cicd.git
+    targetRevision: main
+    path: argocd/apps/production
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    # selfHeal deliberately off in production: an on-call engineer's
+    # temporary kubectl patch during an incident won't get silently
+    # reverted mid-incident. Drift still shows as OutOfSync + Slack alert.
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

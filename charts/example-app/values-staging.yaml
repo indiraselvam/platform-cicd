@@ -1,0 +1,5 @@
+image:
+  repository: "958124171439.dkr.ecr.ap-south-1.amazonaws.com/example-app"
+  tag: "REPLACED_BY_CI"
+
+replicaCount: 2

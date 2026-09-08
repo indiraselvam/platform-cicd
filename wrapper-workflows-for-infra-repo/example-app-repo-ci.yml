@@ -1,0 +1,38 @@
+# Copy this into an application repo (NOT the terraform or platform-cicd
+# repos) as .github/workflows/ci.yml — shown here just so the full chain
+# is visible in one place: build -> scan -> push -> bump gitops -> ArgoCD
+# takes it from there.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  determine-env:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: dev # branch->env mapping; extend for staging/production release branches
+    steps:
+      - run: echo "mapping main -> dev"
+
+  build:
+    needs: determine-env
+    uses: indiraselvam/platform-cicd/.github/workflows/docker-build-push.yml@main
+    with:
+      environment: ${{ needs.determine-env.outputs.environment }}
+      ecr_repository: example-app
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV }}
+
+  deploy:
+    needs: [determine-env, build]
+    uses: indiraselvam/platform-cicd/.github/workflows/bump-gitops-image.yml@main
+    with:
+      environment: ${{ needs.determine-env.outputs.environment }}
+      app_name: example-app
+      image_tag: ${{ needs.build.outputs.image_tag }}
+      auto_merge: true # dev only — staging/production PRs get a human merge
+    secrets:
+      GITOPS_REPO_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}

@@ -1,0 +1,67 @@
+name: terraform-apply
+
+# Reusable workflow — called on merge to main. The `environment:` key
+# below is what makes production gated: create a GitHub Environment named
+# "production-apply" with a required reviewer, and this job will pause and
+# wait for manual approval before it runs, same guarantee Jenkins gave you
+# with an "input" step, but backed by GitHub's own audit log.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      working_directory:
+        required: true
+        type: string
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-apply
+    concurrency:
+      group: terraform-apply-${{ inputs.environment }}
+      cancel-in-progress: false # never cancel a mid-flight apply
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: gha-tfapply-${{ inputs.environment }}-${{ github.run_id }}
+
+      - name: terraform init
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: terraform apply
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var-file=terraform.tfvars \
+            -var-file=../common.tfvars
+
+      - name: Notify Slack on failure
+        if: failure() && inputs.environment == 'production'
+        run: |
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":rotating_light: terraform apply failed on production — $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}"

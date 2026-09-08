@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: production
+  namespace: argocd
+spec:
+  description: Applications running on the production EKS cluster
+  sourceRepos:
+    - "https://github.com/indiraselvam/platform-cicd.git"
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # namespace/kind allow-list intentionally narrower than dev — expand
+  # deliberately per resource type your workloads actually need, don't
+  # default this to "*"/"*" outside dev.
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "external-secrets.io"
+      kind: ExternalSecret
+    - group: "networking.k8s.io"
+      kind: Ingress
+  orphanedResources:
+    warn: true
+  roles:
+    - name: readonly
+      description: Read-only view for the team; syncing production is a deliberate, reviewed action
+      policies:
+        - p, proj:production:readonly, applications, get, production/*, allow
+      groups:
+        - indiraselvam:engineering

@@ -1,0 +1,28 @@
+# The ONLY manifest ever applied by hand (via scripts/bootstrap.sh).
+# Everything else — including changes to this file itself — is managed
+# by ArgoCD reconciling this repo from here on (app-of-apps pattern).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: dev
+  source:
+    repoURL: https://github.com/indiraselvam/platform-cicd.git
+    targetRevision: main
+    path: argocd/apps/dev
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
