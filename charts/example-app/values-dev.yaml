@@ -1,8 +1,6 @@
 image:
   repository: "958124171439.dkr.ecr.ap-south-1.amazonaws.com/dev-sample-app"
-  tag: "REPLACED_BY_CI"
-
+  tag: "ae257948a35b"
 replicaCount: 1
-
 autoscaling:
   enabled: false
