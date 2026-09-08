@@ -15,7 +15,7 @@ jobs:
   diff:
     strategy:
       matrix:
-        environment: [dev, staging, production]
+        environment: [dev]
 
     runs-on: ubuntu-latest
 
