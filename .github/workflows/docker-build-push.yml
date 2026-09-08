@@ -18,7 +18,9 @@ on:
         required: false
         type: string
         default: ap-south-1
-
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
     outputs:
       image_tag:
         value: ${{ jobs.build.outputs.image_tag }}
@@ -45,8 +47,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: gha-build-${{ github.run_id }}
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
+
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
 
