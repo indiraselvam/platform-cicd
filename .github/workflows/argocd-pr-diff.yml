@@ -53,8 +53,13 @@ jobs:
 
           argocd version --client
 
-            # 5. Port-forward Argo CD, then login, check app, and diff — all in one step
-      - name: Port forward, login, and diff Argo CD
+      # 5. Port-forward Argo CD, then check app and diff — all in one step
+      # NOTE: argocd login is skipped entirely. The CLI's login subcommand
+      # was falling back to an interactive username/password prompt even
+      # with --auth-token set (confirmed via direct API test that the
+      # token itself is valid). Every argocd command accepts --auth-token
+      # directly, so we pass it per-command instead of logging in first.
+      - name: Port forward and diff Argo CD
         env:
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_READONLY_TOKEN }}
         run: |
@@ -79,18 +84,17 @@ jobs:
           echo "===== Argo CD Port Forward Log ====="
           cat /tmp/argocd-port-forward.log
 
-          argocd login localhost:8080 \
-            --auth-token "$ARGOCD_AUTH_TOKEN" \
-            --grpc-web \
-            --insecure
+          echo "Token length: ${#ARGOCD_AUTH_TOKEN}"
 
           argocd app get sample-app-${{ matrix.environment }} \
             --server localhost:8080 \
+            --auth-token "$ARGOCD_AUTH_TOKEN" \
             --grpc-web \
             --insecure
 
           argocd app diff sample-app-${{ matrix.environment }} \
             --server localhost:8080 \
+            --auth-token "$ARGOCD_AUTH_TOKEN" \
             --grpc-web \
             --insecure \
             > diff_output.txt 2>&1 || true
