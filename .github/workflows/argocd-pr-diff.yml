@@ -86,13 +86,13 @@ jobs:
 
           echo "Token length: ${#ARGOCD_AUTH_TOKEN}"
 
-          argocd app get sample-app-${{ matrix.environment }} \
+          argocd app get example-app-${{ matrix.environment }} \
             --server localhost:8080 \
             --auth-token "$ARGOCD_AUTH_TOKEN" \
             --grpc-web \
             --insecure
 
-          argocd app diff sample-app-${{ matrix.environment }} \
+          argocd app diff example-app-${{ matrix.environment }} \
             --server localhost:8080 \
             --auth-token "$ARGOCD_AUTH_TOKEN" \
             --grpc-web \
