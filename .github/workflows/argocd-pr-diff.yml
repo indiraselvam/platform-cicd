@@ -45,7 +45,7 @@ jobs:
 
       - name: Diff
         run: |
-          argocd app diff example-app \
+          argocd app diff sample-app-${{ matrix.environment }} \
             --server "${{ vars.ARGOCD_SERVER }}" \
             --grpc-web \
             > diff_output.txt 2>&1 || true
