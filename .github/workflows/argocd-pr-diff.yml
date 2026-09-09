@@ -38,17 +38,22 @@ jobs:
           chmod +x /usr/local/bin/argocd
 
       - name: Login to Argo CD
+        env:
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_READONLY_TOKEN }}
         run: |
-          argocd login "${{ vars.ARGOCD_SERVER }}" \
-            --auth-token "${{ secrets.ARGOCD_READONLY_TOKEN }}" \
-            --grpc-web
+          argocd login localhost:8080 \
+            --auth-token "$ARGOCD_AUTH_TOKEN" \
+            --grpc-web \
+            --insecure
 
       - name: Diff
         run: |
           argocd app diff sample-app-${{ matrix.environment }} \
-            --server "${{ vars.ARGOCD_SERVER }}" \
+            --server localhost:8080 \
             --grpc-web \
+            --insecure \
             > diff_output.txt 2>&1 || true
+           cat diff_output.txt
 
       - name: Comment diff on PR
         uses: actions/github-script@v7
