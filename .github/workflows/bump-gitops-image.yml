@@ -29,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------------------------------
+      # 1. Checkout GitOps repository
+      # -------------------------------------------------
       - name: Checkout platform-cicd
         uses: actions/checkout@v4
         with:
@@ -36,48 +39,128 @@ jobs:
           token: ${{ secrets.GITOPS_REPO_TOKEN }}
           path: platform-cicd
 
-      - name: Bump image.tag
+      # -------------------------------------------------
+      # 2. Update Helm image tag
+      # -------------------------------------------------
+      - name: Bump image tag
         working-directory: platform-cicd
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          FILE="charts/${{ inputs.app_name }}/values-${{ inputs.environment }}.yaml"
+          FILE="charts/${APP_NAME}/values-${ENVIRONMENT}.yaml"
 
-          echo "Updating $FILE"
+          echo "Updating file: $FILE"
+          echo "New image tag: $IMAGE_TAG"
 
-          yq -i '.image.tag = "${{ inputs.image_tag }}"' "$FILE"
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: File does not exist: $FILE"
+            exit 1
+          fi
+
+          yq -i '.image.tag = strenv(IMAGE_TAG)' "$FILE"
 
           echo "Updated values file:"
           cat "$FILE"
 
-      - name: Open PR
+      # -------------------------------------------------
+      # 3. Create branch and commit
+      # -------------------------------------------------
+      - name: Create GitOps branch
         working-directory: platform-cicd
         env:
-          GH_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          BRANCH="bump/${{ inputs.app_name }}-${{ inputs.environment }}-${{ inputs.image_tag }}"
+          BRANCH="bump/${APP_NAME}-${ENVIRONMENT}-${IMAGE_TAG}"
+
+          echo "Creating branch: $BRANCH"
 
           git checkout -b "$BRANCH"
 
           git config user.name "gitops-bot"
           git config user.email "gitops-bot@users.noreply.github.com"
 
-          git add "charts/${{ inputs.app_name }}/values-${{ inputs.environment }}.yaml"
+          git add "charts/${APP_NAME}/values-${ENVIRONMENT}.yaml"
 
-          git commit -m "deploy(${{ inputs.app_name }}/${{ inputs.environment }}): ${{ inputs.image_tag }}"
+          git diff --cached
+
+          git commit -m "deploy(${APP_NAME}/${ENVIRONMENT}): ${IMAGE_TAG}"
 
           git push origin "$BRANCH"
 
+      # -------------------------------------------------
+      # 4. Create Pull Request
+      # -------------------------------------------------
+      - name: Open PR
+        working-directory: platform-cicd
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          BRANCH="bump/${APP_NAME}-${ENVIRONMENT}-${IMAGE_TAG}"
+
           gh pr create \
-            --title "deploy(${{ inputs.app_name }}/${{ inputs.environment }}): ${{ inputs.image_tag }}" \
+            --title "deploy(${APP_NAME}/${ENVIRONMENT}): ${IMAGE_TAG}" \
             --body "Automated image bump from ${{ github.repository }}@${{ github.sha }}" \
             --base main \
             --head "$BRANCH"
 
-      - name: Auto-merge dev
+      # -------------------------------------------------
+      # 5. Merge PR
+      # -------------------------------------------------
+      - name: Auto-merge
         if: inputs.auto_merge
         working-directory: platform-cicd
         env:
           GH_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          BRANCH="bump/${{ inputs.app_name }}-${{ inputs.environment }}-${{ inputs.image_tag }}"
+          BRANCH="bump/${APP_NAME}-${ENVIRONMENT}-${IMAGE_TAG}"
 
-          gh pr merge "$BRANCH" --squash --auto
+          echo "Checking PR merge status..."
+
+          STATUS=$(gh pr view "$BRANCH" \
+            --json mergeStateStatus \
+            --jq '.mergeStateStatus')
+
+          echo "PR merge state: $STATUS"
+
+          if [ "$STATUS" = "CLEAN" ]; then
+            echo "PR is already clean. Merging directly..."
+
+            gh pr merge "$BRANCH" \
+              --squash \
+              --delete-branch
+
+          elif [ "$STATUS" = "BLOCKED" ] || \
+               [ "$STATUS" = "BEHIND" ] || \
+               [ "$STATUS" = "UNSTABLE" ]; then
+
+            echo "PR is waiting for checks/requirements."
+            echo "Enabling GitHub auto-merge..."
+
+            gh pr merge "$BRANCH" \
+              --squash \
+              --auto \
+              --delete-branch
+
+          elif [ "$STATUS" = "DIRTY" ]; then
+            echo "ERROR: PR has merge conflicts."
+            exit 1
+
+          else
+            echo "PR merge state is: $STATUS"
+            echo "Attempting auto-merge..."
+
+            gh pr merge "$BRANCH" \
+              --squash \
+              --auto \
+              --delete-branch
+          fi
