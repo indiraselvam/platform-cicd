@@ -22,7 +22,7 @@ jobs:
     uses: indiraselvam/platform-cicd/.github/workflows/docker-build-push.yml@main
     with:
       environment: ${{ needs.determine-env.outputs.environment }}
-      ecr_repository: example-app
+      ecr_repository: sample-app
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV }}
 
@@ -31,7 +31,7 @@ jobs:
     uses: indiraselvam/platform-cicd/.github/workflows/bump-gitops-image.yml@main
     with:
       environment: ${{ needs.determine-env.outputs.environment }}
-      app_name: example-app
+      app_name: sample-app
       image_tag: ${{ needs.build.outputs.image_tag }}
       auto_merge: true # dev only — staging/production PRs get a human merge
     secrets:

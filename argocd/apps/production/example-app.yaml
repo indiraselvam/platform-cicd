@@ -1,16 +1,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: example-app
+  name: sample-app
   namespace: argocd
   labels:
     environment: production
 spec:
   project: production
   source:
-    repoURL: https://github.com/my-org/platform-cicd.git
+    repoURL: https://github.com/indiraselvam/platform-cicd.git
     targetRevision: main
-    path: charts/example-app
+    path: charts/sample-app
     helm:
       valueFiles:
         - values.yaml
@@ -19,7 +19,7 @@ spec:
       # values-production.yaml changes on a routine deploy.
   destination:
     server: https://kubernetes.default.svc
-    namespace: example-app
+    namespace: sample-app
   syncPolicy:
     automated:
       prune: true

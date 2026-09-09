@@ -1,6 +1,6 @@
 image:
-  repository: "" # set per-env, e.g. <account-id>.dkr.ecr.ap-south-1.amazonaws.com/example-app
-  tag: ""          # bumped by app CI on every build — this is the field that changes 99% of the time
+  repository: "" # set per-env, e.g. <account-id>.dkr.ecr.ap-south-1.amazonaws.com/sample-app
+  tag: "" # bumped by app CI on every build — this is the field that changes 99% of the time
   pullPolicy: IfNotPresent
 
 replicaCount: 2

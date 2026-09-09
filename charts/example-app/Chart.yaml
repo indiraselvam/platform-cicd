@@ -1,5 +1,5 @@
 apiVersion: v2
-name: example-app
+name: sample-app
 description: Template chart — copy this per real application, or genericize with subcharts
 type: application
 version: 0.1.0
