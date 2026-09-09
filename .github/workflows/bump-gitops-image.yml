@@ -124,43 +124,7 @@ jobs:
         run: |
           BRANCH="bump/${APP_NAME}-${ENVIRONMENT}-${IMAGE_TAG}"
 
-          echo "Checking PR merge status..."
-
-          STATUS=$(gh pr view "$BRANCH" \
-            --json mergeStateStatus \
-            --jq '.mergeStateStatus')
-
-          echo "PR merge state: $STATUS"
-
-          if [ "$STATUS" = "CLEAN" ]; then
-            echo "PR is already clean. Merging directly..."
-
+          echo "Merging PR: $BRANCH"
             gh pr merge "$BRANCH" \
               --squash \
               --delete-branch
-
-          elif [ "$STATUS" = "BLOCKED" ] || \
-               [ "$STATUS" = "BEHIND" ] || \
-               [ "$STATUS" = "UNSTABLE" ]; then
-
-            echo "PR is waiting for checks/requirements."
-            echo "Enabling GitHub auto-merge..."
-
-            gh pr merge "$BRANCH" \
-              --squash \
-              --auto \
-              --delete-branch
-
-          elif [ "$STATUS" = "DIRTY" ]; then
-            echo "ERROR: PR has merge conflicts."
-            exit 1
-
-          else
-            echo "PR merge state is: $STATUS"
-            echo "Attempting auto-merge..."
-
-            gh pr merge "$BRANCH" \
-              --squash \
-              --auto \
-              --delete-branch
-          fi
