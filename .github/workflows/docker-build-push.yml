@@ -69,5 +69,14 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image --exit-code 1 --severity HIGH,CRITICAL "$IMAGE_URI" || \
             (echo "Vulnerability scan failed" && exit 1)
-          docker push "$IMAGE_URI"
-          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          if aws ecr describe-images \
+          --repository-name "$REPO" \
+          --image-ids imageTag="$TAG" \
+          --region "${{ inputs.aws_region }}" > /dev/null 2>&1; then
+          echo "Image $IMAGE_URI already exists in ECR. Skipping push."
+           else
+           echo "Pushing new image: $IMAGE_URI"
+           docker push "$IMAGE_URI"
+           fi
+
+           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
