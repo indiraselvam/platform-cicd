@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/indiraselvam/platform-cicd.git
     targetRevision: main
-    path: charts/sample-app
+    path: charts/example-app
     helm:
       valueFiles:
         - values.yaml

@@ -25,7 +25,7 @@ jobs:
     uses: ./.github/workflows/bump-gitops-image.yml
     with:
       environment: dev
-      app_name: sample-app
+      app_name: example-app
       image_tag: ${{ needs.build.outputs.image_tag }}
       auto_merge: true
     secrets:
