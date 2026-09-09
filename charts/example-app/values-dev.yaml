@@ -1,6 +1,6 @@
 image:
   repository: "958124171439.dkr.ecr.ap-south-1.amazonaws.com/dev-example-app"
-  tag: "37554529f615"
+  tag: "f8c5873b7654"
 replicaCount: 1
 autoscaling:
   enabled: false
